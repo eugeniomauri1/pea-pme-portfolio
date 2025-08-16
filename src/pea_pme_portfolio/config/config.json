@@ -1,0 +1,52 @@
+{
+    "city_to_yf_suffix": {
+        "Dublin": ".IR",
+        "Lisbon": ".LS",
+        "Brussels": ".BR",
+        "Oslo": ".OL",
+        "Milan": ".MI",
+        "Paris": ".PA",
+        "Amsterdam": ".AS"
+    },
+    "euronext_website_config":{
+        "base_url": "https://connect2.euronext.com/en/media/169",
+        "dataset_name": "liste_pea_pme",
+        "header_line": 16,
+        "columns_to_use": [3, 4, 5, 6, 7],
+        "renaming_columns":{
+            "Société/Company": "Company",
+            "CodeISIN/ISINCode": "ISIN",
+            "Marché/Market": "Market",
+            "Compartiment/Compartment": "Compartment",
+            "Pays d'incorporation/Country of Incorporation": "Country"
+        }
+    },
+    "yfinance_default_fundamentals":[
+        "industry",
+        "sector",
+        "overallRisk",
+        "beta",
+        "dividendYield",
+        "fiveYearAvgDividendYield",
+        "trailingPE",
+        "forwardPE",
+        "regularMarketVolume",
+        "marketCap",
+        "currency",
+        "enterpriseValue",
+        "profitMargins",
+        "bookValue",
+        "priceToBook",
+        "trailingEps",
+        "forwardEps",
+        "totalCash",
+        "totalCashPerShare",
+        "totalDebt",
+        "totalRevenue",
+        "revenuePerShare",
+        "returnOnAssets",
+        "returnOnEquity",
+        "grossProfits",
+        "operatingMargins"
+    ]
+}

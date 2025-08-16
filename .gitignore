@@ -1,0 +1,32 @@
+*.txt
+*.ipynb
+*.csv
+!output/*.csv
+
+.ipynb_checkpoints/
+
+# remove useless files
+*.pyc
+__pycache__/
+
+#remove cache folders
+*_cache/
+
+# coverage files
+.coverage
+coverage.*
+
+# virtualenv
+.venv/
+
+# vscode settings
+.vscode/
+
+# uv lock
+uv.lock
+
+#sqlite database
+mydb.sqlite
+
+# test results
+htmlcov/
