@@ -325,9 +325,12 @@ def data_loader(
 
     df_eligible_asset = pd.DataFrame()
 
+    if verbose: print("Loading Euronext eligible assets from Excel file...")
+
     df_eligible_asset = load_excel_from_euronext()
     
     #get tickers from ISINs
+    if verbose: print("Fetching tickers from ISINs...")
     isins = df_eligible_asset['ISIN'].tolist()
     tickers = get_tickers_from_isins(isins, verbose=verbose,openfigi_api_key=openfigi_api_key, max_retries=kwargs.get('max_retries', 10), batch_size=kwargs.get('batch_size', 30))
     
@@ -335,8 +338,10 @@ def data_loader(
     df_eligible_asset['Ticker_'] = df_eligible_asset['ISIN'].map(tickers)
 
     if save_to_csv:
+        if verbose: print(f"Saving raw DataFrame at {output_dir+'peapmea_assets_raw.csv'}...")
         df_eligible_asset.to_csv(output_dir+'peapmea_assets_raw.csv', index=False)
 
+    if verbose: print("Fetching Yahoo Finance suffixes for markets...")
     suffixes = get_suffix(df_eligible_asset['Market'].tolist(), verbose = verbose)
 
     df_eligible_asset["Suffix"] = suffixes
@@ -349,8 +354,10 @@ def data_loader(
     df_eligible_asset["Ticker"] = df_eligible_asset.Ticker_ + df_eligible_asset.Suffix
     df_eligible_asset.drop(columns=['Suffix',"Ticker_"], inplace=True)
 
+    if verbose: print("Fetching fundamentals from Yahoo Finance...")
     fundamentals_from_yf = load_fundamentals_from_yf(tickers=df_eligible_asset['Ticker'].tolist(), verbose=verbose, max_retries=kwargs.get('max_retries', 10), delay=kwargs.get('delay', 0.2))
 
+    if verbose: print("Adding fundamentals to DataFrame...")
     #add fundamentals to DataFrame
     for i in df_eligible_asset.index:
         ticker = df_eligible_asset.loc[i, 'Ticker']
@@ -359,7 +366,9 @@ def data_loader(
                 df_eligible_asset.loc[i, key] = value
         else:
             if verbose: print(f"Ticker {ticker} not found in fundamentals data. Skipping.")
-
+    if save_to_csv:
+        if verbose: print(f"Saving final DataFrame at {output_dir+'peapmea_assets_with_fundamentals.csv'}...")
+        df_eligible_asset.to_csv(output_dir+'peapmea_assets_with_fundamentals.csv', index=False)
     return df_eligible_asset
 
 
