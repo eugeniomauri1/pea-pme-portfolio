@@ -13,38 +13,71 @@ import os
 import logging
 
 
+
 logger = logging.getLogger(__name__)
 
-def load_excel_from_euronext(
-        config_file: str = './config/config.json',
-        verbose: bool = False
-)-> pd.DataFrame:
+city_to_yf_suffix = {
+        "Dublin": ".IR",
+        "Lisbon": ".LS",
+        "Brussels": ".BR",
+        "Oslo": ".OL",
+        "Milan": ".MI",
+        "Paris": ".PA",
+        "Amsterdam": ".AS"
+    }
+
+euronext_website_config = {
+        "base_url": "https://connect2.euronext.com/en/media/169",
+        "dataset_name": "liste_pea_pme",
+        "header_line": 16,
+        "columns_to_use": [3, 4, 5, 6, 7],
+        "renaming_columns":{
+            "Société/Company": "Company",
+            "CodeISIN/ISINCode": "ISIN",
+            "Marché/Market": "Market",
+            "Compartiment/Compartment": "Compartment",
+            "Pays d'incorporation/Country of Incorporation": "Country"
+        }}
+
+yfinance_default_fundamentals = [
+        "industry",
+        "sector",
+        "overallRisk",
+        "beta",
+        "dividendYield",
+        "fiveYearAvgDividendYield",
+        "trailingPE",
+        "forwardPE",
+        "regularMarketVolume",
+        "marketCap",
+        "currency",
+        "enterpriseValue",
+        "profitMargins",
+        "bookValue",
+        "priceToBook",
+        "trailingEps",
+        "forwardEps",
+        "totalCash",
+        "totalCashPerShare",
+        "totalDebt",
+        "totalRevenue",
+        "revenuePerShare",
+        "returnOnAssets",
+        "returnOnEquity",
+        "grossProfits",
+        "operatingMargins"
+    ]
+
+def load_excel_from_euronext()-> pd.DataFrame:
     """
     Load the Euronext eligible assets from a local Excel file.
-
-    Parameters
-    ----------
-    config_file : str
-        Path to the configuration file containing the Excel file path.
-    verbose : bool
-        If True, print additional information during the fetching process.
 
     Returns
     -------
     pd.DataFrame
         DataFrame containing the eligible assets.
     """
-    # get this python file directory
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    # construct the full path to the config file
-    config_file_full = os.path.join(current_dir, config_file)
-    
-    #load config file
-    try:
-        with open(config_file_full, 'r') as f:
-            config = json.load(f)["euronext_website_config"]
-    except FileNotFoundError as e:
-        if verbose: print(f"Config file not found at {config_file_full} or configuration 'euronext_website_config' missing: {e}")
+    config = euronext_website_config
     
     #get configuration details
     query_substr = config["dataset_name"]
@@ -140,7 +173,6 @@ def get_tickers_from_isins(
 
 def get_suffix(
     markets: List[str],
-    config_file: str ='./config/config.json',
     verbose:bool = False
     )-> List[str]:
     """
@@ -149,8 +181,6 @@ def get_suffix(
     ----------
     market : str
         Market name (e.g., 'Dublin', 'Lisbon', etc.).
-    config_file : str
-        Path to the configuration file containing the mapping of cities to Yahoo Finance suffixes.
     verbose : bool
         If True, print additional information during the fetching process.
     Returns
@@ -158,17 +188,7 @@ def get_suffix(
     str
         Yahoo Finance suffix for the market.
     """
-    # get this python file directory
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    # construct the full path to the config file
-    config_file_full = os.path.join(current_dir, config_file)
-
-    #recover the mapping saved in config file
-    try:
-        with open(config_file_full, 'r') as f:
-            mapping_dict = json.load(f)['city_to_yf_suffix']
-    except FileNotFoundError as e:
-        if verbose: print(f"Config file {config_file_full} not found or specific configuration 'city_to_yf_suffix' missing: {e}")
+    mapping_dict = city_to_yf_suffix
 
     results = []
 
@@ -189,7 +209,6 @@ def get_suffix(
 def load_fundamentals_from_yf(
     tickers: List[str],
     fundamentals: typing.Optional[List[str]] = None,
-    config_file: str = './config/config.json',
     max_retries: int = 10,
     delay: float = 0.2,
     verbose = False) -> dict:
@@ -203,8 +222,6 @@ def load_fundamentals_from_yf(
     fundamentals : list of str, optional
         List of fundamental data fields to fetch. If None, the defaulting list will be loaded from the config.json file.
         Common fields include 'trailingPE', 'forwardPE', 'priceToBook', 'dividendYield', etc.
-    config_file : str
-        Path to the configuration file.
     max_retries : int
         Number of retries for failed requests (with exponential backoff).
     delay : float
@@ -218,19 +235,8 @@ def load_fundamentals_from_yf(
         Dictionary mapping ticker symbols to their fundamental data.
     """
     if fundamentals is None:
-        if verbose: print("No fundamentals provided, loading default from config file.")
-        # get this python file directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # construct the full path to the config file
-        config_file_full = os.path.join(current_dir, config_file)
-
-        #load config file
-        try:
-            with open(config_file_full, 'r') as f:
-                _fundamentals = json.load(f)["yfinance_default_fundamentals"]
-        except FileNotFoundError as e:
-            if verbose: print(f"Config file not found at {config_file_full} or configuration 'yfinance_default_fundamentals' missing: {e}")
-            return {}
+        if verbose: print("No fundamentals provided, loading default one.")
+        _fundamentals = yfinance_default_fundamentals
     else:
         _fundamentals = fundamentals
     
@@ -283,6 +289,78 @@ def load_fundamentals_from_yf(
     return results
 
 
+def data_loader(
+    openfigi_api_key: typing.Optional[str] = None,
+    verbose: bool = False,
+    save_to_csv: bool = False,
+    kwargs: dict = {
+        'max_retries': 10,
+        'batch_size': 30,
+        'delay': 0.2
+    }
+) -> typing.Union[pd.DataFrame, pd.Series[typing.Any]]:
+    """
+    Load the Euronext eligible assets and their tickers from a local Excel file.
+
+    Parameters
+    ----------
+    openfigi_api_key : str, optional
+        OpenFIGI API key for authentication. It is not required for public access, but recommended for higher rate limits.
+    verbose : bool
+        If True, print additional information during the fetching process.
+    save_to_csv : bool
+        If True, save the DataFrame to a CSV file.
+    kwargs_ticker_from_isins : dict, optional
+        Additional keyword arguments to pass to the `get_tickers_from_isins` function, such as `max_retries`, `batch_size`, etc.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the eligible assets and their tickers.
+    """
+    # get this python file directory
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # construct the full path to the config file
+    output_dir = os.path.join(current_dir, "../output/")
+
+    df_eligible_asset = pd.DataFrame()
+
+    df_eligible_asset = load_excel_from_euronext()
+    
+    #get tickers from ISINs
+    isins = df_eligible_asset['ISIN'].tolist()
+    tickers = get_tickers_from_isins(isins, verbose=verbose,openfigi_api_key=openfigi_api_key, max_retries=kwargs.get('max_retries', 10), batch_size=kwargs.get('batch_size', 30))
+    
+    #add tickers to DataFrame
+    df_eligible_asset['Ticker_'] = df_eligible_asset['ISIN'].map(tickers)
+
+    if save_to_csv:
+        df_eligible_asset.to_csv(output_dir+'peapmea_assets_raw.csv', index=False)
+
+    suffixes = get_suffix(df_eligible_asset['Market'].tolist(), verbose = verbose)
+
+    df_eligible_asset["Suffix"] = suffixes
+    # drop rowns with None in Ticker
+    df_eligible_asset = df_eligible_asset.dropna(subset=['Ticker_'])
+    # #drop rows with "NaN" in Suffix
+    mask_sfx = df_eligible_asset['Suffix'] != 'NaN'
+    df_eligible_asset = df_eligible_asset.loc[mask_sfx,:]
+
+    df_eligible_asset["Ticker"] = df_eligible_asset.Ticker_ + df_eligible_asset.Suffix
+    df_eligible_asset.drop(columns=['Suffix',"Ticker_"], inplace=True)
+
+    fundamentals_from_yf = load_fundamentals_from_yf(tickers=df_eligible_asset['Ticker'].tolist(), verbose=verbose, max_retries=kwargs.get('max_retries', 10), delay=kwargs.get('delay', 0.2))
+
+    #add fundamentals to DataFrame
+    for i in df_eligible_asset.index:
+        ticker = df_eligible_asset.loc[i, 'Ticker']
+        if ticker in list(fundamentals_from_yf.keys()):
+            for key, value in fundamentals_from_yf[ticker].items():
+                df_eligible_asset.loc[i, key] = value
+        else:
+            if verbose: print(f"Ticker {ticker} not found in fundamentals data. Skipping.")
+
+    return df_eligible_asset
 
 
 
