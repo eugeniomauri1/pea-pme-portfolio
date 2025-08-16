@@ -12,26 +12,12 @@ import urllib.request
 import os
 import logging
 
-class TqdmLoggingHandler(logging.Handler):
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-        except Exception:
-            msg = record.getMessage()
-        tqdm.write(msg)
 
 logger = logging.getLogger(__name__)
 
-# avoid adding duplicate handlers if function called multiple times
-if not any(isinstance(h, TqdmLoggingHandler) for h in logger.handlers):
-    handler = TqdmLoggingHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False  # prevent double output to root handlers
-
 def load_excel_from_euronext(
         config_file: str = './config/config.json',
+        verbose: bool = False
 )-> pd.DataFrame:
     """
     Load the Euronext eligible assets from a local Excel file.
@@ -40,6 +26,8 @@ def load_excel_from_euronext(
     ----------
     config_file : str
         Path to the configuration file containing the Excel file path.
+    verbose : bool
+        If True, print additional information during the fetching process.
 
     Returns
     -------
@@ -56,7 +44,7 @@ def load_excel_from_euronext(
         with open(config_file_full, 'r') as f:
             config = json.load(f)["euronext_website_config"]
     except FileNotFoundError as e:
-        print(f"Config file not found at {config_file_full} or configuration 'euronext_website_config' missing: {e}")
+        if verbose: print(f"Config file not found at {config_file_full} or configuration 'euronext_website_config' missing: {e}")
     
     #get configuration details
     query_substr = config["dataset_name"]
@@ -82,7 +70,8 @@ def get_tickers_from_isins(
         isins: List[str],
         max_retries: int =10,
         batch_size: int =100,
-        openfigi_api_key: typing.Optional[str]=None)-> dict:
+        openfigi_api_key: typing.Optional[str]=None,
+        verbose:bool=False)-> dict:
     """
     Query OpenFIGI to get tickers from a list of ISIN codes.
 
@@ -96,7 +85,8 @@ def get_tickers_from_isins(
         Max number of ISINs per request.
     openfigi_api_key : str, optional
         OpenFIGI API key for authentication. It is not required for public access, but recommended for higher rate limits.
-
+    verbose : bool
+        If True, print additional information during the fetching process.
     Returns
     -------
     dict
@@ -118,7 +108,7 @@ def get_tickers_from_isins(
     n_batches = (len(isins) + batch_size - 1) // batch_size
 
     # tqdm progress bar
-    for i in tqdm(range(0, len(isins), batch_size), desc="Fetching ISINs", total=n_batches):
+    for i in tqdm(range(0, len(isins), batch_size), desc="Fetching ISINs", total=n_batches, disable=not verbose):
  
         batch = isins[i:i + batch_size]
         payload = [{"idType": "ID_ISIN", "idValue": isin} for isin in batch]
@@ -143,20 +133,26 @@ def get_tickers_from_isins(
                         results[isin] = None
                 break  # success → exit retry loop
             except Exception as e:
-                print(f"Error parsing batch {batch}: {e}")
+                if verbose: print(f"Error parsing batch {batch}: {e}")
                 break
 
     return results
 
 def get_suffix(
     markets: List[str],
-    config_file: str ='./config/config.json')-> List[str]:
+    config_file: str ='./config/config.json',
+    verbose:bool = False
+    )-> List[str]:
     """
     Get the Yahoo Finance suffix for a given market.
     Parameters
     ----------
     market : str
         Market name (e.g., 'Dublin', 'Lisbon', etc.).
+    config_file : str
+        Path to the configuration file containing the mapping of cities to Yahoo Finance suffixes.
+    verbose : bool
+        If True, print additional information during the fetching process.
     Returns
     -------
     str
@@ -172,7 +168,7 @@ def get_suffix(
         with open(config_file_full, 'r') as f:
             mapping_dict = json.load(f)['city_to_yf_suffix']
     except FileNotFoundError as e:
-        print(f"Config file {config_file_full} not found or specific configuration 'city_to_yf_suffix' missing: {e}")
+        if verbose: print(f"Config file {config_file_full} not found or specific configuration 'city_to_yf_suffix' missing: {e}")
 
     results = []
 
@@ -181,12 +177,12 @@ def get_suffix(
         try:
             city_ = next((city for city in list(mapping_dict.keys()) if city.lower() in str(market).lower()), None)
             if city_ is None:
-                print(f"Market {market} not found in mapping. NaN will be returned.")
+                if verbose: print(f"Market {market} not found in mapping. NaN will be returned.")
                 results.append('NaN')
                 continue
             results.append(mapping_dict[city_])
         except KeyError as e:
-            print(f"Market {market} not found in mapping. NaN will be returned.")
+            if verbose: print(f"Market {market} not found in mapping. NaN will be returned.")
             results.append('NaN')
     return results
 
@@ -195,7 +191,8 @@ def load_fundamentals_from_yf(
     fundamentals: typing.Optional[List[str]] = None,
     config_file: str = './config/config.json',
     max_retries: int = 10,
-    delay: float = 0.2) -> dict:
+    delay: float = 0.2,
+    verbose = False) -> dict:
     """
     Load fundamental data from Yahoo Finance for a list of tickers.
 
@@ -212,6 +209,8 @@ def load_fundamentals_from_yf(
         Number of retries for failed requests (with exponential backoff).
     delay : float
         Initial delay between requests in seconds.
+    verbose : bool
+        If True, print additional information during the fetching process.
 
     Returns
     -------
@@ -219,7 +218,7 @@ def load_fundamentals_from_yf(
         Dictionary mapping ticker symbols to their fundamental data.
     """
     if fundamentals is None:
-        print("No fundamentals provided, loading default from config file.")
+        if verbose: print("No fundamentals provided, loading default from config file.")
         # get this python file directory
         current_dir = os.path.dirname(os.path.abspath(__file__))
         # construct the full path to the config file
@@ -230,13 +229,13 @@ def load_fundamentals_from_yf(
             with open(config_file_full, 'r') as f:
                 _fundamentals = json.load(f)["yfinance_default_fundamentals"]
         except FileNotFoundError as e:
-            print(f"Config file not found at {config_file_full} or configuration 'yfinance_default_fundamentals' missing: {e}")
+            if verbose: print(f"Config file not found at {config_file_full} or configuration 'yfinance_default_fundamentals' missing: {e}")
             return {}
     else:
         _fundamentals = fundamentals
     
     results = {}
-    for ticker in tqdm(tickers, desc="Fetching fundamentals"):
+    for ticker in tqdm(tickers, desc="Fetching fundamentals", disable=not verbose):
         retries = 0
         #manage retries with exponential backoff, but if error 404, do not retry
         while True:
@@ -263,20 +262,20 @@ def load_fundamentals_from_yf(
 
                 # If the underlying exception is requests.HTTPError or response shows 404, treat as non-retriable
                 if status_code == 404 or isinstance(e, requests.HTTPError) or "404" in str(e):
-                    logger.warning("Ticker %s returned 404/not found: %s", ticker, e)
+                    if verbose: logger.warning("Ticker %s returned 404/not found: %s", ticker, e)
                     results[ticker] = {}  # record as empty / missing
                     break
 
                 retries += 1
                 if retries >= max_retries:
-                    logger.error("Failed to fetch fundamentals for %s after %d retries: %s", ticker, retries, e)
+                    if verbose: logger.error("Failed to fetch fundamentals for %s after %d retries: %s", ticker, retries, e)
                     results[ticker] = {}
                     break
 
                 # exponential backoff with jitter
                 backoff = delay * (2 ** (retries - 1))
                 sleep_time = backoff 
-                logger.debug("Error fetching %s: %s. Retrying %d/%d after %.2fs", ticker, e, retries, max_retries, sleep_time)
+                if verbose: logger.debug("Error fetching %s: %s. Retrying %d/%d after %.2fs", ticker, e, retries, max_retries, sleep_time)
                 time.sleep(sleep_time)
         #add a small delay to avoid hitting the API rate limit
         time.sleep(delay)
