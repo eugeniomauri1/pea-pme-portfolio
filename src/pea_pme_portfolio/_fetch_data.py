@@ -298,7 +298,7 @@ def data_loader(
         'batch_size': 30,
         'delay': 0.2
     }
-) -> typing.Union[pd.DataFrame, pd.Series[typing.Any]]:
+) -> typing.Union[pd.DataFrame, pd.Series]:
     """
     Load the Euronext eligible assets and their tickers from a local Excel file.
 
