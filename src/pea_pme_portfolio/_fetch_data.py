@@ -1,10 +1,9 @@
 import numpy as np
 import requests
-import yfinance as yf # type: ignore
+import yfinance as yf  # type: ignore
 import pandas as pd
 import time
 from tqdm import tqdm
-import json
 import typing
 from typing import List
 import regex as re
@@ -13,62 +12,63 @@ import os
 import logging
 
 
-
 logger = logging.getLogger(__name__)
 
 city_to_yf_suffix = {
-        "Dublin": ".IR",
-        "Lisbon": ".LS",
-        "Brussels": ".BR",
-        "Oslo": ".OL",
-        "Milan": ".MI",
-        "Paris": ".PA",
-        "Amsterdam": ".AS"
-    }
+    "Dublin": ".IR",
+    "Lisbon": ".LS",
+    "Brussels": ".BR",
+    "Oslo": ".OL",
+    "Milan": ".MI",
+    "Paris": ".PA",
+    "Amsterdam": ".AS",
+}
 
 euronext_website_config = {
-        "base_url": "https://connect2.euronext.com/en/media/169",
-        "dataset_name": "liste_pea_pme",
-        "header_line": 16,
-        "columns_to_use": [3, 4, 5, 6, 7],
-        "renaming_columns":{
-            "Société/Company": "Company",
-            "CodeISIN/ISINCode": "ISIN",
-            "Marché/Market": "Market",
-            "Compartiment/Compartment": "Compartment",
-            "Pays d'incorporation/Country of Incorporation": "Country"
-        }}
+    "base_url": "https://connect2.euronext.com/en/media/169",
+    "dataset_name": "liste_pea_pme",
+    "header_line": 16,
+    "columns_to_use": [3, 4, 5, 6, 7],
+    "renaming_columns": {
+        "Société/Company": "Company",
+        "CodeISIN/ISINCode": "ISIN",
+        "Marché/Market": "Market",
+        "Compartiment/Compartment": "Compartment",
+        "Pays d'incorporation/Country of Incorporation": "Country",
+    },
+}
 
 yfinance_default_fundamentals = [
-        "industry",
-        "sector",
-        "overallRisk",
-        "beta",
-        "dividendYield",
-        "fiveYearAvgDividendYield",
-        "trailingPE",
-        "forwardPE",
-        "regularMarketVolume",
-        "marketCap",
-        "currency",
-        "enterpriseValue",
-        "profitMargins",
-        "bookValue",
-        "priceToBook",
-        "trailingEps",
-        "forwardEps",
-        "totalCash",
-        "totalCashPerShare",
-        "totalDebt",
-        "totalRevenue",
-        "revenuePerShare",
-        "returnOnAssets",
-        "returnOnEquity",
-        "grossProfits",
-        "operatingMargins"
-    ]
+    "industry",
+    "sector",
+    "overallRisk",
+    "beta",
+    "dividendYield",
+    "fiveYearAvgDividendYield",
+    "trailingPE",
+    "forwardPE",
+    "regularMarketVolume",
+    "marketCap",
+    "currency",
+    "enterpriseValue",
+    "profitMargins",
+    "bookValue",
+    "priceToBook",
+    "trailingEps",
+    "forwardEps",
+    "totalCash",
+    "totalCashPerShare",
+    "totalDebt",
+    "totalRevenue",
+    "revenuePerShare",
+    "returnOnAssets",
+    "returnOnEquity",
+    "grossProfits",
+    "operatingMargins",
+]
 
-def load_excel_from_euronext()-> pd.DataFrame:
+
+def load_excel_from_euronext() -> pd.DataFrame:
     """
     Load the Euronext eligible assets from a local Excel file.
 
@@ -78,10 +78,10 @@ def load_excel_from_euronext()-> pd.DataFrame:
         DataFrame containing the eligible assets.
     """
     config = euronext_website_config
-    
-    #get configuration details
+
+    # get configuration details
     query_substr = config["dataset_name"]
-    url = config["base_url"]
+    url = str(config["base_url"])
     header = config["header_line"]
     usecols = config["columns_to_use"]
     renaming_columns_dict = config["renaming_columns"]
@@ -91,20 +91,20 @@ def load_excel_from_euronext()-> pd.DataFrame:
         mystr = mybytes.decode("utf8")
 
     r = re.compile('(?<=href=").*?(?=")')
-    links = re.findall(r,mystr)
-    url_to_excel = "".join( s for s in np.unique(links) if query_substr in s)
+    links = re.findall(r, mystr)
+    url_to_excel = "".join(s for s in np.unique(links) if query_substr in s)
     df_eligible_asset = pd.read_excel(url_to_excel, header=header, usecols=usecols)
     df_eligible_asset.rename(columns=renaming_columns_dict, inplace=True)
     return df_eligible_asset
 
 
-
 def get_tickers_from_isins(
-        isins: List[str],
-        max_retries: int =10,
-        batch_size: int =100,
-        openfigi_api_key: typing.Optional[str]=None,
-        verbose:bool=False)-> dict:
+    isins: List[str],
+    max_retries: int = 10,
+    batch_size: int = 100,
+    openfigi_api_key: typing.Optional[str] = None,
+    verbose: bool = False,
+) -> dict:
     """
     Query OpenFIGI to get tickers from a list of ISIN codes.
 
@@ -127,36 +127,41 @@ def get_tickers_from_isins(
     """
 
     headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Cache-Control': 'private,no-cache,no-store,must-revalidate',
-        'Expires': '0',
-        'Pragma': 'no-cache'
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Cache-Control": "private,no-cache,no-store,must-revalidate",
+        "Expires": "0",
+        "Pragma": "no-cache",
     }
     # If an OpenFIGI API key is provided, add it to the headers
     if openfigi_api_key:
-        headers['X-OPENFIGI-APIKEY'] = openfigi_api_key
+        headers["X-OPENFIGI-APIKEY"] = openfigi_api_key
 
     results = {}
     n_batches = (len(isins) + batch_size - 1) // batch_size
 
     # tqdm progress bar
-    for i in tqdm(range(0, len(isins), batch_size), desc="Fetching ISINs", total=n_batches, disable=not verbose):
- 
-        batch = isins[i:i + batch_size]
+    for i in tqdm(
+        range(0, len(isins), batch_size),
+        desc="Fetching ISINs",
+        total=n_batches,
+        disable=not verbose,
+    ):
+        batch = isins[i : i + batch_size]
         payload = [{"idType": "ID_ISIN", "idValue": isin} for isin in batch]
 
         delay = 2
         for attempt in range(max_retries):
-            response = requests.post("https://api.openfigi.com/v3/mapping", 
-                                    json=payload, headers=headers)
+            response = requests.post(
+                "https://api.openfigi.com/v3/mapping", json=payload, headers=headers
+            )
 
             if response.status_code != 200:
                 time.sleep(delay)
                 delay *= 2
 
                 continue
-            
+
             try:
                 data = response.json()
                 for isin, item in zip(batch, data):
@@ -166,15 +171,14 @@ def get_tickers_from_isins(
                         results[isin] = None
                 break  # success → exit retry loop
             except Exception as e:
-                if verbose: print(f"Error parsing batch {batch}: {e}")
+                if verbose:
+                    print(f"Error parsing batch {batch}: {e}")
                 break
 
     return results
 
-def get_suffix(
-    markets: List[str],
-    verbose:bool = False
-    )-> List[str]:
+
+def get_suffix(markets: List[str], verbose: bool = False) -> List[str]:
     """
     Get the Yahoo Finance suffix for a given market.
     Parameters
@@ -195,23 +199,36 @@ def get_suffix(
     # Iterate through the markets and map them to their corresponding suffixes
     for market in markets:
         try:
-            city_ = next((city for city in list(mapping_dict.keys()) if city.lower() in str(market).lower()), None)
+            city_ = next(
+                (
+                    city
+                    for city in list(mapping_dict.keys())
+                    if city.lower() in str(market).lower()
+                ),
+                None,
+            )
             if city_ is None:
-                if verbose: print(f"Market {market} not found in mapping. NaN will be returned.")
-                results.append('NaN')
+                if verbose:
+                    print(
+                        f"Market {market} not found in mapping. NaN will be returned."
+                    )
+                results.append("NaN")
                 continue
             results.append(mapping_dict[city_])
-        except KeyError as e:
-            if verbose: print(f"Market {market} not found in mapping. NaN will be returned.")
-            results.append('NaN')
+        except KeyError:
+            if verbose:
+                print(f"Market {market} not found in mapping. NaN will be returned.")
+            results.append("NaN")
     return results
+
 
 def load_fundamentals_from_yf(
     tickers: List[str],
     fundamentals: typing.Optional[List[str]] = None,
     max_retries: int = 10,
     delay: float = 0.2,
-    verbose = False) -> dict:
+    verbose=False,
+) -> dict:
     """
     Load fundamental data from Yahoo Finance for a list of tickers.
 
@@ -235,15 +252,16 @@ def load_fundamentals_from_yf(
         Dictionary mapping ticker symbols to their fundamental data.
     """
     if fundamentals is None:
-        if verbose: print("No fundamentals provided, loading default one.")
+        if verbose:
+            print("No fundamentals provided, loading default one.")
         _fundamentals = yfinance_default_fundamentals
     else:
         _fundamentals = fundamentals
-    
+
     results = {}
     for ticker in tqdm(tickers, desc="Fetching fundamentals", disable=not verbose):
         retries = 0
-        #manage retries with exponential backoff, but if error 404, do not retry
+        # manage retries with exponential backoff, but if error 404, do not retry
         while True:
             try:
                 # fetch info
@@ -267,23 +285,34 @@ def load_fundamentals_from_yf(
                     status_code = getattr(resp, "status_code", None)
 
                 # If the underlying exception is requests.HTTPError or response shows 404, treat as non-retriable
-                if status_code == 404 or isinstance(e, requests.HTTPError) or "404" in str(e):
-                    if verbose: tqdm.write(f"Ticker {ticker} returned 404/not found: {e}")
+                if (
+                    status_code == 404
+                    or isinstance(e, requests.HTTPError)
+                    or "404" in str(e)
+                ):
+                    if verbose:
+                        tqdm.write(f"Ticker {ticker} returned 404/not found: {e}")
                     results[ticker] = {}  # record as empty / missing
                     break
 
                 retries += 1
                 if retries >= max_retries:
-                    if verbose: tqdm.write(f"Failed to fetch fundamentals for {ticker} after {retries} retries: {e}")
+                    if verbose:
+                        tqdm.write(
+                            f"Failed to fetch fundamentals for {ticker} after {retries} retries: {e}"
+                        )
                     results[ticker] = {}
                     break
 
                 # exponential backoff with jitter
                 backoff = delay * (2 ** (retries - 1))
-                sleep_time = backoff 
-                if verbose: tqdm.write(f"Error fetching {ticker}: {e}. Retrying {retries}/{max_retries} after {sleep_time:.2f}s")
+                sleep_time = backoff
+                if verbose:
+                    tqdm.write(
+                        f"Error fetching {ticker}: {e}. Retrying {retries}/{max_retries} after {sleep_time:.2f}s"
+                    )
                 time.sleep(sleep_time)
-        #add a small delay to avoid hitting the API rate limit
+        # add a small delay to avoid hitting the API rate limit
         time.sleep(delay)
 
     return results
@@ -293,11 +322,7 @@ def data_loader(
     openfigi_api_key: typing.Optional[str] = None,
     verbose: bool = False,
     save_to_csv: bool = False,
-    kwargs: dict = {
-        'max_retries': 10,
-        'batch_size': 30,
-        'delay': 0.2
-    }
+    kwargs: dict = {"max_retries": 10, "batch_size": 30, "delay": 0.2},
 ) -> typing.Union[pd.DataFrame, pd.Series]:
     """
     Load the Euronext eligible assets and their tickers from a local Excel file.
@@ -325,51 +350,71 @@ def data_loader(
 
     df_eligible_asset = pd.DataFrame()
 
-    if verbose: print("Loading Euronext eligible assets from Excel file...")
+    if verbose:
+        print("Loading Euronext eligible assets from Excel file...")
 
     df_eligible_asset = load_excel_from_euronext()
-    
-    #get tickers from ISINs
-    if verbose: print("Fetching tickers from ISINs...")
-    isins = df_eligible_asset['ISIN'].tolist()
-    tickers = get_tickers_from_isins(isins, verbose=verbose,openfigi_api_key=openfigi_api_key, max_retries=kwargs.get('max_retries', 10), batch_size=kwargs.get('batch_size', 30))
-    
-    #add tickers to DataFrame
-    df_eligible_asset['Ticker_'] = df_eligible_asset['ISIN'].map(tickers)
+
+    # get tickers from ISINs
+    if verbose:
+        print("Fetching tickers from ISINs...")
+    isins = df_eligible_asset["ISIN"].tolist()
+    tickers = get_tickers_from_isins(
+        isins,
+        verbose=verbose,
+        openfigi_api_key=openfigi_api_key,
+        max_retries=kwargs.get("max_retries", 10),
+        batch_size=kwargs.get("batch_size", 30),
+    )
+
+    # add tickers to DataFrame
+    df_eligible_asset["Ticker_"] = df_eligible_asset["ISIN"].map(tickers)
 
     if save_to_csv:
-        if verbose: print(f"Saving raw DataFrame at {output_dir+'peapmea_assets_raw.csv'}...")
-        df_eligible_asset.to_csv(output_dir+'peapmea_assets_raw.csv', index=False)
+        if verbose:
+            print(f"Saving raw DataFrame at {output_dir + 'peapmea_assets_raw.csv'}...")
+        df_eligible_asset.to_csv(output_dir + "peapmea_assets_raw.csv", index=False)
 
-    if verbose: print("Fetching Yahoo Finance suffixes for markets...")
-    suffixes = get_suffix(df_eligible_asset['Market'].tolist(), verbose = verbose)
+    if verbose:
+        print("Fetching Yahoo Finance suffixes for markets...")
+    suffixes = get_suffix(df_eligible_asset["Market"].tolist(), verbose=verbose)
 
     df_eligible_asset["Suffix"] = suffixes
     # drop rowns with None in Ticker
-    df_eligible_asset = df_eligible_asset.dropna(subset=['Ticker_'])
+    df_eligible_asset = df_eligible_asset.dropna(subset=["Ticker_"])
     # #drop rows with "NaN" in Suffix
-    mask_sfx = df_eligible_asset['Suffix'] != 'NaN'
-    df_eligible_asset = df_eligible_asset.loc[mask_sfx,:]
+    mask_sfx = df_eligible_asset["Suffix"] != "NaN"
+    df_eligible_asset = df_eligible_asset.loc[mask_sfx, :]
 
     df_eligible_asset["Ticker"] = df_eligible_asset.Ticker_ + df_eligible_asset.Suffix
-    df_eligible_asset.drop(columns=['Suffix',"Ticker_"], inplace=True)
+    df_eligible_asset.drop(columns=["Suffix", "Ticker_"], inplace=True)
 
-    if verbose: print("Fetching fundamentals from Yahoo Finance...")
-    fundamentals_from_yf = load_fundamentals_from_yf(tickers=df_eligible_asset['Ticker'].tolist(), verbose=verbose, max_retries=kwargs.get('max_retries', 10), delay=kwargs.get('delay', 0.2))
+    if verbose:
+        print("Fetching fundamentals from Yahoo Finance...")
+    fundamentals_from_yf = load_fundamentals_from_yf(
+        tickers=df_eligible_asset["Ticker"].tolist(),
+        verbose=verbose,
+        max_retries=kwargs.get("max_retries", 10),
+        delay=kwargs.get("delay", 0.2),
+    )
 
-    if verbose: print("Adding fundamentals to DataFrame...")
-    #add fundamentals to DataFrame
+    if verbose:
+        print("Adding fundamentals to DataFrame...")
+    # add fundamentals to DataFrame
     for i in df_eligible_asset.index:
-        ticker = df_eligible_asset.loc[i, 'Ticker']
+        ticker = df_eligible_asset.loc[i, "Ticker"]
         if ticker in list(fundamentals_from_yf.keys()):
             for key, value in fundamentals_from_yf[ticker].items():
                 df_eligible_asset.loc[i, key] = value
         else:
-            if verbose: print(f"Ticker {ticker} not found in fundamentals data. Skipping.")
+            if verbose:
+                print(f"Ticker {ticker} not found in fundamentals data. Skipping.")
     if save_to_csv:
-        if verbose: print(f"Saving final DataFrame at {output_dir+'peapmea_assets_with_fundamentals.csv'}...")
-        df_eligible_asset.to_csv(output_dir+'peapmea_assets_with_fundamentals.csv', index=False)
+        if verbose:
+            print(
+                f"Saving final DataFrame at {output_dir + 'peapmea_assets_with_fundamentals.csv'}..."
+            )
+        df_eligible_asset.to_csv(
+            output_dir + "peapmea_assets_with_fundamentals.csv", index=False
+        )
     return df_eligible_asset
-
-
-

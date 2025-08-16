@@ -10,7 +10,7 @@ dependencies = [
     "numpy>=2.1.0",
     "tqdm>=4.66.5",
     "matplotlib>=3.10",
-    "ipykernel">=6.30,
+    "ipykernel>=6.30",
 ]
 
 [build-system]
@@ -31,5 +31,4 @@ dev-dependencies = [
     "python-lsp-server>=1.12.2",
     "watchdog>=6.0.0",
     "pre-commit>=4.2.0",
-
 ]
