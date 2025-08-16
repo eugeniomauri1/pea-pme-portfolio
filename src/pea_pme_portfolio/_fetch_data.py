@@ -268,20 +268,20 @@ def load_fundamentals_from_yf(
 
                 # If the underlying exception is requests.HTTPError or response shows 404, treat as non-retriable
                 if status_code == 404 or isinstance(e, requests.HTTPError) or "404" in str(e):
-                    if verbose: logger.warning("Ticker %s returned 404/not found: %s", ticker, e)
+                    if verbose: tqdm.write(f"Ticker {ticker} returned 404/not found: {e}")
                     results[ticker] = {}  # record as empty / missing
                     break
 
                 retries += 1
                 if retries >= max_retries:
-                    if verbose: logger.error("Failed to fetch fundamentals for %s after %d retries: %s", ticker, retries, e)
+                    if verbose: tqdm.write(f"Failed to fetch fundamentals for {ticker} after {retries} retries: {e}")
                     results[ticker] = {}
                     break
 
                 # exponential backoff with jitter
                 backoff = delay * (2 ** (retries - 1))
                 sleep_time = backoff 
-                if verbose: logger.debug("Error fetching %s: %s. Retrying %d/%d after %.2fs", ticker, e, retries, max_retries, sleep_time)
+                if verbose: tqdm.write(f"Error fetching {ticker}: {e}. Retrying {retries}/{max_retries} after {sleep_time:.2f}s")
                 time.sleep(sleep_time)
         #add a small delay to avoid hitting the API rate limit
         time.sleep(delay)

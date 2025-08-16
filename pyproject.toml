@@ -1,0 +1,35 @@
+[project]
+name = "pea_pme_portfolio"
+version = "0.1.0"
+description =  "Package to construct your portfolio of European SMEs elegible to the French PEA-PME saving account"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "yfinance>=0.2.43",
+    "pandas>=2.2.2",
+    "numpy>=2.1.0",
+    "tqdm>=4.66.5",
+    "matplotlib>=3.10",
+    "ipykernel">=6.30,
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.2",
+    "pytest-cov>=5.0.0",
+    "pytest-dependency>=0.6.0",
+    "ruff>=0.6.4",
+    "mypy>=1.11.2",
+    "pandas-stubs>=2.2.2.240807",
+    "types-tqdm>=4.66.0.20240417",
+    "google-generativeai>=0.8.4",
+    "python-lsp-server>=1.12.2",
+    "watchdog>=6.0.0",
+    "pre-commit>=4.2.0",
+
+]
