@@ -321,7 +321,7 @@ def data_loader(
     # get this python file directory
     current_dir = os.path.dirname(os.path.abspath(__file__))
     # construct the full path to the config file
-    output_dir = os.path.join(current_dir, "../output/")
+    output_dir = os.path.join(current_dir, "../../output/")
 
     df_eligible_asset = pd.DataFrame()
 
