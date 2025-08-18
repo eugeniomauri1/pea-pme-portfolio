@@ -3,13 +3,34 @@ import requests
 import yfinance as yf  # type: ignore
 import pandas as pd
 import time
-from tqdm import tqdm
 import typing
 from typing import List
 import regex as re
 import urllib.request
 import os
 import logging
+import sys
+
+
+def tqdm(*args, **kwargs):
+    """
+    Environment-aware tqdm wrapper:
+    - In Jupyter/IPython kernels, use tqdm.notebook.tqdm
+    - Otherwise, use tqdm.tqdm
+    Always writes to sys.stdout to avoid 'missing bar' issues in VS Code/devcontainers.
+    """
+    try:
+        from IPython import get_ipython
+
+        ip = get_ipython()
+        if ip and "IPKernelApp" in ip.config:  # Jupyter/IPython kernel
+            from tqdm.notebook import tqdm as _tqdm
+        else:
+            from tqdm import tqdm as _tqdm
+    except Exception:
+        from tqdm import tqdm as _tqdm
+
+    return _tqdm(*args, file=sys.stdout, **kwargs)
 
 
 logger = logging.getLogger(__name__)
@@ -141,12 +162,13 @@ def get_tickers_from_isins(
     n_batches = (len(isins) + batch_size - 1) // batch_size
 
     # tqdm progress bar
-    for i in tqdm(
+    pbar = tqdm(
         range(0, len(isins), batch_size),
         desc="Fetching ISINs",
         total=n_batches,
         disable=not verbose,
-    ):
+    )
+    for i in pbar:
         batch = isins[i : i + batch_size]
         payload = [{"idType": "ID_ISIN", "idValue": isin} for isin in batch]
 
@@ -172,7 +194,7 @@ def get_tickers_from_isins(
                 break  # success → exit retry loop
             except Exception as e:
                 if verbose:
-                    print(f"Error parsing batch {batch}: {e}")
+                    pbar.set_postfix_str(f"Error parsing batch {batch}: {e}")
                 break
 
     return results
@@ -259,7 +281,10 @@ def load_fundamentals_from_yf(
         _fundamentals = fundamentals
 
     results = {}
-    for ticker in tqdm(tickers, desc="Fetching fundamentals", disable=not verbose):
+    pbar = tqdm(tickers, desc="Fetching fundamentals", disable=not verbose)
+    not_found_list = []
+    failed_fetching = []
+    for ticker in pbar:
         retries = 0
         # manage retries with exponential backoff, but if error 404, do not retry
         while True:
@@ -291,29 +316,30 @@ def load_fundamentals_from_yf(
                     or "404" in str(e)
                 ):
                     if verbose:
-                        tqdm.write(f"Ticker {ticker} returned 404/not found: {e}")
+                        not_found_list.append(f"{ticker}")
                     results[ticker] = {}  # record as empty / missing
                     break
 
                 retries += 1
                 if retries >= max_retries:
                     if verbose:
-                        tqdm.write(
-                            f"Failed to fetch fundamentals for {ticker} after {retries} retries: {e}"
-                        )
+                        failed_fetching.append(f"{ticker}")
                     results[ticker] = {}
                     break
 
                 # exponential backoff with jitter
                 backoff = delay * (2 ** (retries - 1))
                 sleep_time = backoff
-                if verbose:
-                    tqdm.write(
-                        f"Error fetching {ticker}: {e}. Retrying {retries}/{max_retries} after {sleep_time:.2f}s"
-                    )
                 time.sleep(sleep_time)
         # add a small delay to avoid hitting the API rate limit
         time.sleep(delay)
+    if verbose:
+        if not_found_list:
+            print(f"Tickers not found in Yahoo Finance: {', '.join(not_found_list)}")
+        if failed_fetching:
+            print(
+                f"Failed to fetch data for tickers after retries: {', '.join(failed_fetching)}"
+            )
 
     return results
 
@@ -325,7 +351,7 @@ def data_loader(
     kwargs: dict = {"max_retries": 10, "batch_size": 30, "delay": 0.2},
 ) -> typing.Union[pd.DataFrame, pd.Series]:
     """
-    Load the Euronext eligible assets and their tickers from a local Excel file.
+    Load the list of PEA-PME eligible assets available on the Euronext exchanges.
 
     Parameters
     ----------
@@ -341,7 +367,7 @@ def data_loader(
     Returns
     -------
     pd.DataFrame
-        DataFrame containing the eligible assets and their tickers.
+        DataFrame containing the eligible assets and their fundamentals.
     """
     # get this python file directory
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -412,9 +438,9 @@ def data_loader(
     if save_to_csv:
         if verbose:
             print(
-                f"Saving final DataFrame at {output_dir + 'peapmea_assets_with_fundamentals.csv'}..."
+                f"Saving final DataFrame at {output_dir + 'peapme_assets_with_fundamentals.csv'}..."
             )
         df_eligible_asset.to_csv(
-            output_dir + "peapmea_assets_with_fundamentals.csv", index=False
+            output_dir + "peapme_assets_with_fundamentals.csv", index=False
         )
     return df_eligible_asset
