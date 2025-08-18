@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import scipy as sc
+import matplotlib.pyplot as plt
 
 
 def get_value_portfolio(
@@ -55,8 +56,7 @@ def get_value_portfolio(
         # curency is not nan
         (all_assets["currency"].notna())
     ].copy()
-    if verbose:
-        print(f"Filtered assets: {len(filtered_assets)}")
+
     # convert marketCap in foreing currency to EUR
     # load the exchange rates from yfinance
 
@@ -142,3 +142,95 @@ def get_value_portfolio(
         )
 
     return selected_assets
+
+
+def get_portfolio_plots(
+    portfolio: pd.DataFrame, verbose: bool = True
+) -> tuple[plt.Figure, plt.Figure, pd.DataFrame, pd.DataFrame]:
+    """
+    Create plots for the portfolio.
+
+    Parameters:
+        portfolio (pd.DataFrame): DataFrame containing the portfolio assets.
+        verbose (bool): If True, print additional information.
+
+    Returns:
+        tuple[plt.Figure, plt.Figure]: Tuple containing the pie chart and bar chart figures.
+    """
+    # assert that the DataFrame has the required columns
+    required_columns = ["Ticker", "Weight", "sector", "Country"]
+    for col in required_columns:
+        if col not in portfolio.columns:
+            raise ValueError(f"Missing required column: {col}")
+
+    # create a subplots with the pie charts of the weights per industry and country (weighted by the weights of the assets)
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6), tight_layout=True)
+    # Pie chart for industry distribution
+    industry_counts = portfolio.groupby("sector")["Weight"].sum()
+    ax[0].pie(
+        industry_counts,
+        labels=industry_counts.index,
+        autopct="%1.1f%%",
+        startangle=140,
+    )
+    ax[0].set_title("Industry Distribution")
+    # Pie chart for country distribution
+    country_counts = portfolio.groupby("Country")["Weight"].sum()
+    ax[1].pie(
+        country_counts,
+        labels=country_counts.index,
+        autopct="%1.1f%%",
+        startangle=140,
+    )
+    ax[1].set_title("Country Distribution")
+    if verbose:
+        print("Loading asset data from yfinance...")
+    # load aseset data from yfinance
+    tickers = portfolio["Ticker"].tolist()
+    if len(tickers) > 0:
+        asset_data_full = yf.download(
+            tickers, period="max", progress=verbose, auto_adjust=False
+        )
+        asset_data_no_div = asset_data_full["Close"]
+        asset_data = asset_data_full["Adj Close"]
+        asset_data = asset_data.ffill().dropna()
+        asset_data_no_div = asset_data_no_div.ffill().dropna()
+    else:
+        raise ValueError("No tickers found in the portfolio.")
+
+    number_of_stocks = portfolio["Weight"] / asset_data.loc[:, tickers].iloc[-1].values
+    portfolio_performance = (
+        asset_data.loc[:, tickers] * number_of_stocks.values[np.newaxis, :]
+    ).sum(axis=1)
+    portfolio_performance = portfolio_performance.ffill().dropna()
+    portfolio_performance = portfolio_performance / portfolio_performance.iloc[0] - 1
+
+    portfolio_performance_no_div = (
+        asset_data_no_div.loc[:, tickers] * number_of_stocks.values[np.newaxis, :]
+    ).sum(axis=1)
+    portfolio_performance_no_div = portfolio_performance_no_div.ffill().dropna()
+    portfolio_performance_no_div = (
+        portfolio_performance_no_div / portfolio_performance_no_div.iloc[0] - 1
+    )
+
+    # create a chart with the portfolio performance
+    fig2, ax2 = plt.subplots(figsize=(12, 6), tight_layout=True)
+    ax2.plot(
+        portfolio_performance.index,
+        portfolio_performance,
+        label="With Dividends",
+        color="orange",
+    )
+    ax2.plot(
+        portfolio_performance_no_div.index,
+        portfolio_performance_no_div,
+        label="Without Dividends",
+        color="violet",
+    )
+    ax2.set_title("Portfolio Performance")
+    ax2.set_xlabel("Date")
+    ax2.set_ylabel("Performance")
+    ax2.legend()
+    ax2.grid(True)
+
+    return fig, fig2, portfolio_performance, portfolio_performance_no_div
