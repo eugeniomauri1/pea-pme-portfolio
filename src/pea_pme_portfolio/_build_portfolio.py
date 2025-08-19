@@ -158,7 +158,7 @@ def get_portfolio_plots(
         tuple[plt.Figure, plt.Figure]: Tuple containing the pie chart and bar chart figures.
     """
     # assert that the DataFrame has the required columns
-    required_columns = ["Ticker", "Weight", "sector", "Country"]
+    required_columns = ["Ticker", "Weight", "sector", "Country", "currency"]
     for col in required_columns:
         if col not in portfolio.columns:
             raise ValueError(f"Missing required column: {col}")
@@ -198,6 +198,48 @@ def get_portfolio_plots(
     else:
         raise ValueError("No tickers found in the portfolio.")
 
+    # convert asset performance in EUR
+
+    all_currencies = portfolio["currency"].unique()
+    fx_tickers = [
+        f"EUR{currency}=X" for currency in all_currencies if currency != "EUR"
+    ]
+    tickers_not_eur = {
+        portfolio.loc[_, "Ticker"]: portfolio.loc[_, "currency"]
+        for _ in portfolio.index
+        if portfolio.loc[_, "currency"] != "EUR"
+    }
+    # load last close values for the exchange rates
+    if verbose:
+        print(f"Fetching exchange rates for: {', '.join(fx_tickers)}")
+    if fx_tickers:
+        fx_data = yf.download(fx_tickers, period="max", progress=verbose)["Close"]
+        fx_data = fx_data.ffill()  # fill missing
+        fx_data.rename(
+            columns={
+                ticker: ticker.replace("EUR", "").replace("=X", "")
+                for ticker in fx_data.columns
+            },
+            inplace=True,
+        )
+        asset_data_no_div, fx_data_ = asset_data_no_div.align(
+            fx_data, join="outer", axis=0
+        )
+        for ticker, currency in tickers_not_eur.items():
+            if currency in fx_data_.columns:
+                asset_data_no_div[ticker] = (
+                    asset_data_no_div[ticker] / fx_data_[currency]
+                )
+            else:
+                raise ValueError(f"Currency {currency} not found in exchange rates.")
+        asset_data, fx_data_ = asset_data.align(fx_data, join="outer", axis=0)
+        for ticker, currency in tickers_not_eur.items():
+            if currency in fx_data_.columns:
+                asset_data[ticker] = asset_data[ticker] / fx_data_[currency]
+            else:
+                raise ValueError(f"Currency {currency} not found in exchange rates.")
+    asset_data = asset_data.ffill().dropna()
+    asset_data_no_div = asset_data_no_div.ffill().dropna()
     number_of_stocks = portfolio["Weight"] / asset_data.loc[:, tickers].iloc[-1].values
     portfolio_performance = (
         asset_data.loc[:, tickers] * number_of_stocks.values[np.newaxis, :]
@@ -231,6 +273,10 @@ def get_portfolio_plots(
     ax2.set_xlabel("Date")
     ax2.set_ylabel("Performance")
     ax2.legend()
-    ax2.grid(True)
+    ax2.grid(True, alpha=0.5)
+    ax2.axhline(0, color="black", linestyle="--", linewidth=0.5)
+    ax2.set_xlim(portfolio_performance.index.min(), portfolio_performance.index.max())
+    # set y tickes as percentage
+    ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0%}"))
 
     return fig, fig2, portfolio_performance, portfolio_performance_no_div
