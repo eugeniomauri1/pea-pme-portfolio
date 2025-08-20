@@ -82,7 +82,7 @@ The only difference is the command to install `uv`:
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
-Then you can follow the same steps as above to install python and run the UI.
+Then you can follow the same steps as above to install python and run the code.
 
 ## How to Contribute
 **Prepare the local environment**
