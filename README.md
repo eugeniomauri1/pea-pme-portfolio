@@ -3,6 +3,7 @@
 ## **Introduction**
 
 **What is it?**
+
 A [PEA-PME](https://www.service-public.fr/particuliers/vosdroits/F2385) (Plan d'Épargne en Actions destiné aux Petites et Moyennes Entreprises) is a French investment account designed to encourage investment in small and medium-sized enterprises (PME) and intermediate-sized enterprises (ETI). It offers tax advantages similar to the standard PEA (Plan d'Épargne en Actions) but is specifically focused on smaller businesses.
 
 Key Features of a PEA-PME:
@@ -16,6 +17,7 @@ Company size conditions to be eligible:
     * Either annual revenue below €1.5 billion or total assets below €2 billion
 
 **Purpose of the code**
+
 As of today, there isn't an ETF eligible for this kind of account. The goal of this code is to help you fetch data of PEA-PME eligible assets traded in the [EuroNext](https://connect2.euronext.com/en/media/169) exchanges and load fundamentals from [OpenFIGI](https://www.openfigi.com/) and [Yahoo Finance](https://finance.yahoo.com/) (through the dedicated python package [`yfinance`](https://ranaroussi.github.io/yfinance/)). Moreover, we propose a simple function to construct a value and high-yield portfolio.
 
 ---
@@ -40,6 +42,7 @@ This project consists of a python package `pea_pme_portfolio`. To run it, you ne
 Assuming nothing is installed, you can follow the instructions below to install `uv` and run the code.
 
 **Linux / MacOS**
+
 Install `uv` using the following command:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -74,6 +77,7 @@ value_portfolio = get_value_portfolio(eligible_assets,
         verbose= True)
 ```
 **Windows**
+
 The only difference is the command to install `uv`:
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -89,12 +93,14 @@ uv sync
 (this step is not strictly necessary, it will be done automatically at the first `uv run` command)
 
 **Pre-commit**
+
 To install pre-commit hooks, run the following command:
 ```bash
 uv run pre-commit install
 ```
 
 **Testing**
+
 To run the tests, use the following command:
 ```bash
 uv run pytest --cov=src
