@@ -3,7 +3,7 @@
 ## **Introduction**
 
 **What is it?**
-A PEA-PME (Plan d'Épargne en Actions destiné aux Petites et Moyennes Entreprises) is a French investment account designed to encourage investment in small and medium-sized enterprises (PME) and intermediate-sized enterprises (ETI). It offers tax advantages similar to the standard PEA (Plan d'Épargne en Actions) but is specifically focused on smaller businesses.
+A [PEA-PME](https://www.service-public.fr/particuliers/vosdroits/F2385) (Plan d'Épargne en Actions destiné aux Petites et Moyennes Entreprises) is a French investment account designed to encourage investment in small and medium-sized enterprises (PME) and intermediate-sized enterprises (ETI). It offers tax advantages similar to the standard PEA (Plan d'Épargne en Actions) but is specifically focused on smaller businesses.
 
 Key Features of a PEA-PME:
 * Eligible Investments: Shares in SMEs and ETIs (both listed and unlisted), as well as certain investment funds (e.g., OPCVMs, FCPs) that allocate at least 75% of their assets to eligible SMEs/ETIs.
