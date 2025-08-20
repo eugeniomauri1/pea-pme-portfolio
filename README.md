@@ -50,7 +50,7 @@ Then use `uv` to install python:
 uv python install 3.12
 ```
 
-Finally, use the python environment to run the UI (`uv` it will install the package and its dependencies):
+Finally, use the python environment to run the code (`uv` will install the package and its dependencies):
 ```python
 import pea_pme_portfolio
 opefigi_key = ... #your free openfigi api key. it will make the fetching faster
