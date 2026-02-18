@@ -8,7 +8,6 @@ from typing import List
 import regex as re
 import urllib.request
 import os
-import logging
 import sys
 
 
@@ -32,18 +31,6 @@ def tqdm(*args, **kwargs):
 
     return _tqdm(*args, file=sys.stdout, **kwargs)
 
-
-logger = logging.getLogger(__name__)
-
-city_to_yf_suffix = {
-    "Dublin": ".IR",
-    "Lisbon": ".LS",
-    "Brussels": ".BR",
-    "Oslo": ".OL",
-    "Milan": ".MI",
-    "Paris": ".PA",
-    "Amsterdam": ".AS",
-}
 
 euronext_website_config = {
     "base_url": "https://connect2.euronext.com/en/media/169",
@@ -121,126 +108,43 @@ def load_excel_from_euronext() -> pd.DataFrame:
 
 def get_tickers_from_isins(
     isins: List[str],
-    max_retries: int = 10,
-    batch_size: int = 100,
-    openfigi_api_key: typing.Optional[str] = None,
+    max_retries: int = 5,
+    base_delay: float = 1.0,
     verbose: bool = False,
-) -> dict:
-    """
-    Query OpenFIGI to get tickers from a list of ISIN codes.
-
-    Parameters
-    ----------
-    isins : list of str
-        List of ISIN codes.
-    max_retries : int
-        Number of retries for failed requests (with exponential backoff).
-    batch_size : int
-        Max number of ISINs per request.
-    openfigi_api_key : str, optional
-        OpenFIGI API key for authentication. It is not required for public access, but recommended for higher rate limits.
-    verbose : bool
-        If True, print additional information during the fetching process.
-    Returns
-    -------
-    dict
-        Mapping {isin: ticker or None}
-    """
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Cache-Control": "private,no-cache,no-store,must-revalidate",
-        "Expires": "0",
-        "Pragma": "no-cache",
-    }
-    # If an OpenFIGI API key is provided, add it to the headers
-    if openfigi_api_key:
-        headers["X-OPENFIGI-APIKEY"] = openfigi_api_key
-
+) -> dict[str, str]:
     results = {}
-    n_batches = (len(isins) + batch_size - 1) // batch_size
 
-    # tqdm progress bar
-    pbar = tqdm(
-        range(0, len(isins), batch_size),
-        desc="Fetching ISINs",
-        total=n_batches,
-        disable=not verbose,
-    )
-    for i in pbar:
-        batch = isins[i : i + batch_size]
-        payload = [{"idType": "ID_ISIN", "idValue": isin} for isin in batch]
+    iterator = tqdm(isins, desc="Fetching ISINs", disable=not verbose)
 
-        delay = 2
+    for isin in iterator:
         for attempt in range(max_retries):
-            response = requests.post(
-                "https://api.openfigi.com/v3/mapping", json=payload, headers=headers
-            )
-
-            if response.status_code != 200:
-                time.sleep(delay)
-                delay *= 2
-
-                continue
-
             try:
-                data = response.json()
-                for isin, item in zip(batch, data):
-                    if "data" in item and item["data"]:
-                        results[isin] = item["data"][0].get("ticker")
-                    else:
-                        results[isin] = None
-                break  # success → exit retry loop
-            except Exception as e:
-                if verbose:
-                    pbar.set_postfix_str(f"Error parsing batch {batch}: {e}")
+                ticker = yf.utils.get_ticker_by_isin(isin)
+
+                results[isin] = ticker
                 break
 
-    return results
+            except Exception:
+                # exponential backoff + jitter
+                sleep_time = base_delay * (2**attempt)
+                sleep_time += np.random.uniform(0, 1)
 
-
-def get_suffix(markets: List[str], verbose: bool = False) -> List[str]:
-    """
-    Get the Yahoo Finance suffix for a given market.
-    Parameters
-    ----------
-    market : str
-        Market name (e.g., 'Dublin', 'Lisbon', etc.).
-    verbose : bool
-        If True, print additional information during the fetching process.
-    Returns
-    -------
-    str
-        Yahoo Finance suffix for the market.
-    """
-    mapping_dict = city_to_yf_suffix
-
-    results = []
-
-    # Iterate through the markets and map them to their corresponding suffixes
-    for market in markets:
-        try:
-            city_ = next(
-                (
-                    city
-                    for city in list(mapping_dict.keys())
-                    if city.lower() in str(market).lower()
-                ),
-                None,
-            )
-            if city_ is None:
                 if verbose:
                     print(
-                        f"Market {market} not found in mapping. NaN will be returned."
+                        f"[Retry {attempt + 1}] ISIN {isin} failed. Sleeping {sleep_time:.2f}s"
                     )
-                results.append("NaN")
-                continue
-            results.append(mapping_dict[city_])
-        except KeyError:
+
+                time.sleep(sleep_time)
+
+        else:
+            # If all retries exhausted
+            results[isin] = ""
             if verbose:
-                print(f"Market {market} not found in mapping. NaN will be returned.")
-            results.append("NaN")
+                print(f"[FAILED] {isin}")
+
+        # small delay to reduce rate limiting
+        time.sleep(0.5)
+
     return results
 
 
@@ -345,24 +249,21 @@ def load_fundamentals_from_yf(
 
 
 def data_loader(
-    openfigi_api_key: typing.Optional[str] = None,
     verbose: bool = False,
     save_to_csv: bool = False,
-    kwargs: dict = {"max_retries": 10, "batch_size": 30, "delay": 0.2},
+    kwargs: dict = {"max_retries": 10, "delay": 0.2},
 ) -> typing.Union[pd.DataFrame, pd.Series]:
     """
     Load the list of PEA-PME eligible assets available on the Euronext exchanges.
 
     Parameters
     ----------
-    openfigi_api_key : str, optional
-        OpenFIGI API key for authentication. It is not required for public access, but recommended for higher rate limits.
     verbose : bool
         If True, print additional information during the fetching process.
     save_to_csv : bool
         If True, save the DataFrame to a CSV file.
     kwargs_ticker_from_isins : dict, optional
-        Additional keyword arguments to pass to the `get_tickers_from_isins` function, such as `max_retries`, `batch_size`, etc.
+        Additional keyword arguments to pass to the `get_tickers_from_isins` function, such as `max_retries`, `base_delay`, etc.
 
     Returns
     -------
@@ -388,32 +289,20 @@ def data_loader(
     tickers = get_tickers_from_isins(
         isins,
         verbose=verbose,
-        openfigi_api_key=openfigi_api_key,
         max_retries=kwargs.get("max_retries", 10),
-        batch_size=kwargs.get("batch_size", 30),
+        base_delay=kwargs.get("delay", 0.2),
     )
 
     # add tickers to DataFrame
-    df_eligible_asset["Ticker_"] = df_eligible_asset["ISIN"].map(tickers)
+    df_eligible_asset["Ticker"] = df_eligible_asset["ISIN"].map(tickers)
 
     if save_to_csv:
         if verbose:
             print(f"Saving raw DataFrame at {output_dir + 'peapmea_assets_raw.csv'}...")
         df_eligible_asset.to_csv(output_dir + "peapmea_assets_raw.csv", index=False)
 
-    if verbose:
-        print("Fetching Yahoo Finance suffixes for markets...")
-    suffixes = get_suffix(df_eligible_asset["Market"].tolist(), verbose=verbose)
-
-    df_eligible_asset["Suffix"] = suffixes
     # drop rowns with None in Ticker
-    df_eligible_asset = df_eligible_asset.dropna(subset=["Ticker_"])
-    # #drop rows with "NaN" in Suffix
-    mask_sfx = df_eligible_asset["Suffix"] != "NaN"
-    df_eligible_asset = df_eligible_asset.loc[mask_sfx, :]
-
-    df_eligible_asset["Ticker"] = df_eligible_asset.Ticker_ + df_eligible_asset.Suffix
-    df_eligible_asset.drop(columns=["Suffix", "Ticker_"], inplace=True)
+    df_eligible_asset = df_eligible_asset[df_eligible_asset["Ticker"] != ""]
 
     if verbose:
         print("Fetching fundamentals from Yahoo Finance...")
