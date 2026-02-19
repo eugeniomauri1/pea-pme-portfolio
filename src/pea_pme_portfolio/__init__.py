@@ -1,9 +1,14 @@
 from ._fetch_data import data_loader, load_fundamentals_from_yf
-from ._build_portfolio import get_value_portfolio, get_portfolio_plots
+from ._build_portfolio import (
+    get_value_portfolio,
+    get_quality_portfolio,
+    get_portfolio_plots,
+)
 
 __all__ = [
     "data_loader",
     "get_value_portfolio",
+    "get_quality_portfolio",
     "get_portfolio_plots",
     "load_fundamentals_from_yf",
 ]
