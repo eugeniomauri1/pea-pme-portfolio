@@ -2,20 +2,10 @@ import pandas as pd
 
 
 from pea_pme_portfolio._fetch_data import (
-    get_suffix,
     load_excel_from_euronext,
     get_tickers_from_isins,
     load_fundamentals_from_yf,
 )
-
-
-def test_get_suffix_mappings(capfd):
-    markets = ["Dublin", "Lisbon", "UnknownCity"]
-    result = get_suffix(markets, verbose=True)
-    # Dublin -> .IR, Lisbon -> .LS, UnknownCity -> "NaN"
-    assert result[0] == ".IR"
-    assert result[1] == ".LS"
-    assert result[2] == "NaN"
 
 
 def test_load_excel_from_euronext_monkeypatched(monkeypatch):
@@ -61,28 +51,13 @@ def test_load_excel_from_euronext_monkeypatched(monkeypatch):
 
 def test_get_tickers_from_isins_success(monkeypatch):
     # Prepare a fake successful requests.post returning status_code 200 and useful json
-    class FakeResp:
-        status_code = 200
 
-        def __init__(self, payload):
-            self._payload = payload
-
-        def json(self):
-            return self._payload
-
-    # emulate two ISINs -> results list of dicts, each with "data":[{"ticker":"TICKER"}]
-    def fake_post(url, json=None, headers=None):
-        payload = [{"data": [{"ticker": "AAA"}]}, {"data": []}]
-        return FakeResp(payload)
-
-    monkeypatch.setattr("requests.post", fake_post)
-
-    isins = ["ISIN1", "ISIN2"]
-    res = get_tickers_from_isins(isins, max_retries=2, batch_size=2, verbose=False)
+    isins = ["IT0004171440", "ISIN2"]
+    res = get_tickers_from_isins(isins, max_retries=2, verbose=False)
 
     # first returns 'AAA', second returned None
-    assert res["ISIN1"] == "AAA"
-    assert res["ISIN2"] is None
+    assert res["IT0004171440"] == "ZV.MI"
+    assert res["ISIN2"] == ""
 
 
 def test_load_fundamentals_from_yf_success(monkeypatch):

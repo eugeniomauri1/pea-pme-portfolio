@@ -18,7 +18,7 @@ Company size conditions to be eligible:
 
 **Purpose of the code**
 
-As of today, there isn't an ETF eligible for this kind of account. The goal of this code is to help you fetch data of PEA-PME eligible assets traded in the [EuroNext](https://connect2.euronext.com/en/media/169) exchanges and load fundamentals from [OpenFIGI](https://www.openfigi.com/) and [Yahoo Finance](https://finance.yahoo.com/) (through the dedicated python package [`yfinance`](https://ranaroussi.github.io/yfinance/)). Moreover, we propose a simple function to construct a value and high-yield portfolio.
+As of today, there isn't an ETF eligible for this kind of account. The goal of this code is to help you fetch data of PEA-PME eligible assets traded in the [EuroNext](https://connect2.euronext.com/en/media/169) exchanges and load fundamentals from [Yahoo Finance](https://finance.yahoo.com/) (through the dedicated python package [`yfinance`](https://ranaroussi.github.io/yfinance/)). Moreover, we propose a simple function to construct a value and high-yield portfolio.
 
 ---
 
@@ -56,10 +56,7 @@ uv python install 3.12
 Finally, use the python environment to run the code (`uv` will install the package and its dependencies):
 ```python
 import pea_pme_portfolio
-opefigi_key = ... #your free openfigi api key. it will make the fetching faster
-#the loader will take around 15 minutes
 eligible_assets = data_loader(
-    openfigi_api_key= opefigi_key,
     verbose = True,
     save_to_csv= True,
     kwargs = {

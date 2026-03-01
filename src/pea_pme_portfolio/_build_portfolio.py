@@ -4,6 +4,229 @@ import yfinance as yf
 import scipy as sc
 import matplotlib.pyplot as plt
 
+# def winsorize(s, lower=0.01, upper=0.99):
+#     return s.clip(s.quantile(lower), s.quantile(upper))
+
+
+def safe_zscore(s):
+    std = s.std(ddof=1)
+    if std == 0 or np.isnan(std):
+        return pd.Series(0.0, index=s.index)
+    return (s - s.mean()) / std
+
+
+def convert_cash_columns_to_eur(df):
+    columns_to_convert = ["marketCap", "totalRevenue", "grossProfits", "totalDebt"]
+
+    df = df.dropna(subset=["currency"] + columns_to_convert)
+
+    currencies = df["currency"].dropna().astype(str).str.strip().unique().tolist()
+    non_eur = [c for c in currencies if c != "EUR"]
+
+    fx = {}
+    if non_eur:
+        for c in non_eur:
+            # Create a Yahoo Finance ticker for the currency pair (e.g., "EURUSD=X")
+            ticker = f"{c}EUR=X"
+            try:
+                data = yf.Ticker(ticker)
+                hist = data.history(period="1d")
+                if not hist.empty:
+                    fx[c] = hist["Close"].iloc[-1]
+                else:
+                    fx[c] = np.nan
+            except Exception:
+                fx[c] = np.nan
+
+    # EUR -> EUR
+    fx["EUR"] = 1.0
+
+    # map to dataframe and create converted columns (example: marketCap in EUR)
+    df["fx_to_eur"] = df["currency"].astype(str).str.strip().map(fx)
+    for col in columns_to_convert:
+        df[f"{col}_eur"] = df[col] * df["fx_to_eur"]
+
+    return df
+
+
+def get_quality_portfolio(
+    all_assets: pd.DataFrame,
+    neutralize_sector: bool = False,
+    neutralize_country: bool = False,
+    add_value: bool = False,
+    value_weight: float = 0.5,
+    number_of_assets: int = 10,
+    quality_tilt: float = 0.5,
+    verbose: bool = True,
+) -> pd.DataFrame:
+    """
+    Constructs a quality-focused portfolio by scoring assets based on financial metrics
+    and optionally incorporating value metrics. The portfolio can be neutralized by sector
+    and/or country, and the top assets are selected based on adjusted market capitalization.
+    Parameters:
+    -----------
+    all_assets : pd.DataFrame
+        A DataFrame containing financial data for all assets. Must include columns for
+        quality, leverage, and optionally value metrics.
+    neutralize_sector : bool, optional
+        If True, neutralizes scores by sector (default is False).
+    neutralize_country : bool, optional
+        If True, neutralizes scores by country (default is False).
+    add_value : bool, optional
+        If True, incorporates value metrics into the scoring process (default is False).
+    value_weight : float, optional
+        The weight assigned to value metrics when combining quality and value scores
+        (default is 0.5). Only used if `add_value` is True.
+    number_of_assets : int, optional
+        The number of top assets to include in the portfolio (default is 10).
+    quality_tilt : float, optional
+        The tilt applied to the quality score when adjusting market capitalization
+        (default is 0.5).
+    verbose : bool, optional
+        If True, prints progress messages during the portfolio construction process
+        (default is True).
+    Returns:
+    --------
+    pd.DataFrame
+        A DataFrame containing the selected assets for the portfolio, with their adjusted
+        market capitalization and weights.
+    Notes:
+    ------
+    - The function computes derived metrics, applies winsorization, and calculates quality
+      scores based on financial metrics.
+    - If `add_value` is True, value scores are also computed and combined with quality scores.
+    - Neutralization by sector and/or country is applied if specified.
+    - The final portfolio is constructed by selecting the top assets based on adjusted
+      market capitalization and assigning weights proportional to their adjusted market cap.
+    """
+    df = all_assets.copy()
+
+    # ==============================
+    # 1️⃣ Derived metrics
+    # ==============================
+
+    df["gross_margin"] = df["grossProfits"] / df["totalRevenue"]
+    df["debt_to_rev"] = df["totalDebt"] / df["totalRevenue"]
+    df["debt_to_mcap"] = df["totalDebt"] / df["marketCap"]
+    df["ev_to_rev"] = df["enterpriseValue"] / df["totalRevenue"]
+    df["ev_to_gp"] = df["enterpriseValue"] / df["grossProfits"]
+
+    quality_vars = [
+        "returnOnEquity",
+        "returnOnAssets",
+        "gross_margin",
+        "operatingMargins",
+        "profitMargins",
+    ]
+
+    leverage_vars = [
+        "debt_to_rev",
+        "debt_to_mcap",
+    ]
+
+    value_vars = [
+        "priceToBook",
+        "trailingPE",
+        "forwardPE",
+        "ev_to_rev",
+        "ev_to_gp",
+    ]
+
+    required = quality_vars + leverage_vars
+    if add_value:
+        required += value_vars
+
+    if verbose:
+        print("Computing quality and value scores...")
+    df = df.replace([np.inf, -np.inf], np.nan)
+    df = df.dropna(subset=required)
+    # drop rows with np.inf in required columns
+
+    # ==============================
+    # 2️⃣ Winsorize
+    # ==============================
+
+    # for col in required:
+    #     df[col] = winsorize(df[col])
+
+    # ==============================
+    # 3️⃣ Build Quality block
+    # ==============================
+
+    q_scores = []
+
+    for col in quality_vars:
+        q_scores.append(safe_zscore(df[col]))
+
+    for col in leverage_vars:
+        q_scores.append(-safe_zscore(df[col]))
+
+    df["quality_raw"] = pd.concat(q_scores, axis=1).mean(axis=1)
+
+    # ==============================
+    # 4️⃣ Optional Value block
+    # ==============================
+
+    if add_value:
+        if verbose:
+            print("Adding value block to the score...")
+
+        v_scores = []
+        for col in value_vars:
+            v_scores.append(-safe_zscore(df[col]))  # cheaper = better
+
+        df["value_raw"] = pd.concat(v_scores, axis=1).mean(axis=1)
+
+        # Combine
+        df["raw_score"] = (1 - value_weight) * df["quality_raw"] + value_weight * df[
+            "value_raw"
+        ]
+
+    else:
+        df["raw_score"] = df["quality_raw"]
+
+    # ==============================
+    # 5️⃣ Neutralization
+    # ==============================
+
+    if neutralize_sector and neutralize_country:
+        if verbose:
+            print("Neutralizing scores by sector and country...")
+        df["final_score"] = df.groupby(["sector", "Country"])["raw_score"].transform(
+            safe_zscore
+        )
+
+    elif neutralize_sector:
+        if verbose:
+            print("Neutralizing scores by sector...")
+        df["final_score"] = df.groupby("sector")["raw_score"].transform(safe_zscore)
+
+    elif neutralize_country:
+        if verbose:
+            print("Neutralizing scores by country...")
+        df["final_score"] = df.groupby("Country")["raw_score"].transform(safe_zscore)
+
+    else:
+        df["final_score"] = safe_zscore(df["raw_score"])
+
+    if verbose:
+        print("Converting financial metrics to EUR...")
+    df = convert_cash_columns_to_eur(df)
+
+    if verbose:
+        print("Selecting top assets based on quality score...")
+
+    df = df.dropna(subset=["final_score", "marketCap_eur"])
+
+    df["adjusted_marketCap"] = df.apply(
+        lambda x: x.marketCap_eur * np.exp(quality_tilt * x.final_score), axis=1
+    )
+    df = df.dropna(subset=["adjusted_marketCap"])
+    df = df.sort_values("adjusted_marketCap", ascending=False).head(number_of_assets)
+    df["Weight"] = df["adjusted_marketCap"] / df["adjusted_marketCap"].sum()
+
+    return df
+
 
 def get_value_portfolio(
     all_assets: pd.DataFrame,
